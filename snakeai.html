@@ -3,243 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake AI Game</title>
+    <title>Snake Game with AI and Checkerboard</title>
     <style>
         body {
-            background-color: #2e8b57;
+            margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            margin: 0;
+            background-color: #f0f0f0;
         }
         canvas {
-            border: 20px solid #2c6b3a;
+            display: block;
+            border: 2px solid #000;
         }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-
     <script>
-        const tile = 40;
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const tile = 20;
         const rows = 20;
         const columns = 30;
-        const border = 40;
-        const width = tile * columns + 2 * border;
-        const tallness = tile * rows + 2 * border;
 
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        canvas.width = tile * columns;
+        canvas.height = tile * rows;
 
-        canvas.width = width;
-        canvas.height = tallness;
-
-        // Colors
-        const lightgreen = "#32CD32";
-        const darkgreen = "#228B22";
-        const evendarkergreen = "#054728";
         const snakeColor = "#FF0000";
         const appleColor = "#FFA500";
+        const lightGreen = "#008000";
+        const green = "#0f4d0f";
 
-        let snake = [{ x: 10, y: 10 }, { x: 10, y: 9 }, { x: 10, y: 8 }];
-        let direction = "RIGHT";
-        let apple = generateApple();
+        let snake = [{ x: 10, y: 10 }];
+        let apple = { x: 15, y: 15 };
         let gameOver = false;
 
-        // Utility Functions
-        function generateApple() {
-            let newApple;
-            do {
-                newApple = { x: Math.floor(Math.random() * rows), y: Math.floor(Math.random() * columns) };
-            } while (snake.some(segment => segment.x === newApple.x && segment.y === newApple.y));
-            return newApple;
-        }
-
-        // Manhattan distance
-        function manhattanDistance(a, b) {
-            return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-        }
-
-        // Flood fill function (check reachable area)
-        function floodFill(snake, head) {
-            const visited = new Set();
-            const queue = [head];
-            visited.add(JSON.stringify(head));
-            let reachableArea = 0;
-
-            while (queue.length > 0) {
-                const current = queue.shift();
-                reachableArea++;
-
-                for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                    const neighbor = { x: current.x + dx, y: current.y + dy };
-
-                    if (
-                        neighbor.x >= 0 && neighbor.x < rows &&
-                        neighbor.y >= 0 && neighbor.y < columns &&
-                        !visited.has(JSON.stringify(neighbor)) &&
-                        !snake.some(segment => segment.x === neighbor.x && segment.y === neighbor.y)
-                    ) {
-                        visited.add(JSON.stringify(neighbor));
-                        queue.push(neighbor);
-                    }
-                }
-            }
-            return reachableArea;
-        }
-
-        // A* Pathfinding
-        function aStar(snake, start, goal) {
-            const openSet = [];
-            openSet.push({ f: 0, position: start });
-
-            const cameFrom = {};
-            const gScore = { [JSON.stringify(start)]: 0 };
-            const fScore = { [JSON.stringify(start)]: manhattanDistance(start, goal) };
-
-            while (openSet.length > 0) {
-                const current = openSet.shift().position;
-
-                if (current.x === goal.x && current.y === goal.y) {
-                    const path = [];
-                    let currentPath = current;
-                    while (currentPath in cameFrom) {
-                        path.push(currentPath);
-                        currentPath = cameFrom[currentPath];
-                    }
-                    return path.reverse();
-                }
-
-                for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                    const neighbor = { x: current.x + dx, y: current.y + dy };
-
-                    if (
-                        neighbor.x >= 0 && neighbor.x < rows &&
-                        neighbor.y >= 0 && neighbor.y < columns &&
-                        !snake.some(segment => segment.x === neighbor.x && segment.y === neighbor.y)
-                    ) {
-                        const tentativeGScore = (gScore[JSON.stringify(current)] || Infinity) + 1;
-                        if (tentativeGScore < (gScore[JSON.stringify(neighbor)] || Infinity)) {
-                            cameFrom[JSON.stringify(neighbor)] = current;
-                            gScore[JSON.stringify(neighbor)] = tentativeGScore;
-                            fScore[JSON.stringify(neighbor)] = tentativeGScore + manhattanDistance(neighbor, goal);
-                            openSet.push({ f: fScore[JSON.stringify(neighbor)], position: neighbor });
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-
-        // Check if the tail is reachable after a move
-        function isTailReachable(snake, newHead) {
-            const newSnake = [newHead, ...snake.slice(0, snake.length - 1)];
-            return floodFill(newSnake, newSnake[newSnake.length - 1]) >= newSnake.length;
-        }
-
-        // Get next move using pathfinding
-        function getNextMove(snake, apple) {
-            const head = snake[0];
-
-            // Find path to the apple using A* algorithm
-            const pathToApple = aStar(snake, head, apple);
-
-            if (pathToApple) {
-                const nextPosition = pathToApple[0];
-                const newSnake = [nextPosition, ...snake.slice(0, snake.length - 1)];
-
-                if (floodFill(newSnake, newSnake[newSnake.length - 1]) >= newSnake.length) {
-                    if (nextPosition.x < head.x) return "UP";
-                    if (nextPosition.x > head.x) return "DOWN";
-                    if (nextPosition.y < head.y) return "LEFT";
-                    if (nextPosition.y > head.y) return "RIGHT";
-                }
-            }
-
-            // If moving to the apple isn't safe, choose the best move
-            const possibleMoves = {
-                "UP": { x: head.x - 1, y: head.y },
-                "DOWN": { x: head.x + 1, y: head.y },
-                "LEFT": { x: head.x, y: head.y - 1 },
-                "RIGHT": { x: head.x, y: head.y + 1 },
-            };
-
-            let bestMove = "UP";
-            let maxReachableArea = -1;
-
-            for (const [move, newHead] of Object.entries(possibleMoves)) {
-                if (
-                    newHead.x >= 0 && newHead.x < rows &&
-                    newHead.y >= 0 && newHead.y < columns &&
-                    !snake.some(segment => segment.x === newHead.x && segment.y === newHead.y)
-                ) {
-                    const newSnake = [newHead, ...snake.slice(0, snake.length - 1)];
-                    if (floodFill(newSnake, newSnake[newSnake.length - 1]) >= newSnake.length) {
-                        const reachableArea = floodFill(newSnake, newSnake[newSnake.length - 1]);
-                        if (reachableArea > maxReachableArea) {
-                            maxReachableArea = reachableArea;
-                            bestMove = move;
-                        }
-                    }
-                }
-            }
-
-            return bestMove;
-        }
-
-        // Drawing Functions
-        function drawText(text, size, color, x, y) {
-            const font = "Arial";
-            ctx.fillStyle = color;
-            ctx.font = `${size}px ${font}`;
-            ctx.fillText(text, x, y);
-        }
-
-        function drawGame() {
-            ctx.fillStyle = darkgreen;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = evendarkergreen;
-            ctx.fillRect(border, border, width - 2 * border, tallness - 2 * border);
-
+        function drawCheckerboard() {
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < columns; col++) {
-                    ctx.fillStyle = (row + col) % 2 === 0 ? lightgreen : "#228B22";
-                    ctx.fillRect(border + col * tile, border + row * tile, tile, tile);
+                    ctx.fillStyle = (row + col) % 2 === 0 ? lightGreen : green;
+                    ctx.fillRect(col * tile, row * tile, tile, tile);
                 }
-            }
-
-            snake.forEach(segment => {
-                ctx.fillStyle = snakeColor;
-                ctx.fillRect(border + segment.y * tile, border + segment.x * tile, tile, tile);
-            });
-
-            ctx.fillStyle = appleColor;
-            ctx.fillRect(border + apple.y * tile, border + apple.x * tile, tile, tile);
-
-            if (gameOver) {
-                drawText("Game Over!", 80, "white", width / 2 - 150, tallness / 2 - 50);
-                drawText(`Length: ${snake.length}`, 50, "white", width / 2 - 100, tallness / 2 + 10);
             }
         }
 
-        // Game Loop
-        function gameLoop() {
-            if (gameOver) return;
+        function drawSnake() {
+            ctx.fillStyle = snakeColor;
+            snake.forEach(segment => {
+                ctx.fillRect(segment.x * tile, segment.y * tile, tile, tile);
+            });
+        }
 
-            const move = getNextMove(snake, apple);
+        function drawApple() {
+            ctx.fillStyle = appleColor;
+            ctx.beginPath();
+            ctx.arc(
+                apple.x * tile + tile / 2,
+                apple.y * tile + tile / 2,
+                tile / 3,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
 
-            let head = { ...snake[0] };
-            if (move === "UP") head.x--;
-            if (move === "DOWN") head.x++;
-            if (move === "LEFT") head.y--;
-            if (move === "RIGHT") head.y++;
+        function generateApple() {
+            while (true) {
+                const newApple = {
+                    x: Math.floor(Math.random() * columns),
+                    y: Math.floor(Math.random() * rows),
+                };
+                if (!snake.some(segment => segment.x === newApple.x && segment.y === newApple.y)) {
+                    return newApple;
+                }
+            }
+        }
+
+        function updateSnake() {
+            const head = { ...snake[0] };
+            const nextMove = getNextMove(head);
+            head.x += nextMove.dx;
+            head.y += nextMove.dy;
 
             if (
-                snake.some(segment => segment.x === head.x && segment.y === head.y) ||
-                head.x < 0 || head.x >= rows || head.y < 0 || head.y >= columns
+                head.x < 0 || head.x >= columns || head.y < 0 || head.y >= rows ||
+                snake.some(segment => segment.x === head.x && segment.y === head.y)
             ) {
                 gameOver = true;
+                alert("Game Over!");
                 return;
             }
 
@@ -250,12 +104,72 @@
             } else {
                 snake.pop();
             }
-
-            drawGame();
         }
 
-        setInterval(gameLoop, 100);
+        function getNextMove(head) {
+            const dx = apple.x - head.x;
+            const dy = apple.y - head.y;
 
+            const nextMoves = [];
+
+            // Add potential moves based on proximity to the apple
+            if (dx > 0) nextMoves.push({ dx: 1, dy: 0 }); // Move right
+            if (dx < 0) nextMoves.push({ dx: -1, dy: 0 }); // Move left
+            if (dy > 0) nextMoves.push({ dx: 0, dy: 1 }); // Move down
+            if (dy < 0) nextMoves.push({ dx: 0, dy: -1 }); // Move up
+
+            // Add safe fallback moves (no collisions)
+            const fallbackMoves = [
+                { dx: 1, dy: 0 },
+                { dx: -1, dy: 0 },
+                { dx: 0, dy: 1 },
+                { dx: 0, dy: -1 },
+            ].filter(move => {
+                const newX = head.x + move.dx;
+                const newY = head.y + move.dy;
+                return (
+                    newX >= 0 &&
+                    newX < columns &&
+                    newY >= 0 &&
+                    newY < rows &&
+                    !snake.some(segment => segment.x === newX && segment.y === newY)
+                );
+            });
+
+            // Prioritize optimal moves (toward the apple)
+            for (const move of nextMoves) {
+                const newX = head.x + move.dx;
+                const newY = head.y + move.dy;
+                if (
+                    newX >= 0 &&
+                    newX < columns &&
+                    newY >= 0 &&
+                    newY < rows &&
+                    !snake.some(segment => segment.x === newX && segment.y === newY)
+                ) {
+                    return move;
+                }
+            }
+
+            // If no optimal moves, use fallback
+            return fallbackMoves.length ? fallbackMoves[0] : { dx: 0, dy: 0 };
+        }
+
+        function draw() {
+            drawCheckerboard();
+            drawSnake();
+            drawApple();
+        }
+
+        function gameLoop() {
+            if (!gameOver) {
+                updateSnake();
+                draw();
+            }
+            setTimeout(gameLoop, 100);
+        }
+
+        gameLoop();
     </script>
 </body>
 </html>
