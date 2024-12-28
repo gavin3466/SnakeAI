@@ -26,24 +26,28 @@
         const rows = 20;
         const columns = 30;
         const border = 40;
+        const width = tile * columns + 2 * border;
+        const tallness = tile * rows + 2 * border;
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const lightgreen = '#32CD32';
-        const darkgreen = '#228B22';
-        const evendarkergreen = '#054728';
-        const snakeColor = '#FF0000';
-        const appleColor = '#FFA500';
+        canvas.width = width;
+        canvas.height = tallness;
+
+        // Colors
+        const lightgreen = "#32CD32";
+        const darkgreen = "#228B22";
+        const evendarkergreen = "#054728";
+        const snakeColor = "#FF0000";
+        const appleColor = "#FFA500";
 
         let snake = [{ x: 10, y: 10 }, { x: 10, y: 9 }, { x: 10, y: 8 }];
-        let direction = 'RIGHT';
+        let direction = "RIGHT";
         let apple = generateApple();
         let gameOver = false;
 
-        canvas.width = tile * columns + 2 * border;
-        canvas.height = tile * rows + 2 * border;
-
+        // Utility Functions
         function generateApple() {
             let newApple;
             do {
@@ -52,15 +56,155 @@
             return newApple;
         }
 
+        // Manhattan distance
+        function manhattanDistance(a, b) {
+            return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+        }
+
+        // Flood fill function (check reachable area)
+        function floodFill(snake, head) {
+            const visited = new Set();
+            const queue = [head];
+            visited.add(JSON.stringify(head));
+            let reachableArea = 0;
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+                reachableArea++;
+
+                for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                    const neighbor = { x: current.x + dx, y: current.y + dy };
+
+                    if (
+                        neighbor.x >= 0 && neighbor.x < rows &&
+                        neighbor.y >= 0 && neighbor.y < columns &&
+                        !visited.has(JSON.stringify(neighbor)) &&
+                        !snake.some(segment => segment.x === neighbor.x && segment.y === neighbor.y)
+                    ) {
+                        visited.add(JSON.stringify(neighbor));
+                        queue.push(neighbor);
+                    }
+                }
+            }
+            return reachableArea;
+        }
+
+        // A* Pathfinding
+        function aStar(snake, start, goal) {
+            const openSet = [];
+            openSet.push({ f: 0, position: start });
+
+            const cameFrom = {};
+            const gScore = { [JSON.stringify(start)]: 0 };
+            const fScore = { [JSON.stringify(start)]: manhattanDistance(start, goal) };
+
+            while (openSet.length > 0) {
+                const current = openSet.shift().position;
+
+                if (current.x === goal.x && current.y === goal.y) {
+                    const path = [];
+                    let currentPath = current;
+                    while (currentPath in cameFrom) {
+                        path.push(currentPath);
+                        currentPath = cameFrom[currentPath];
+                    }
+                    return path.reverse();
+                }
+
+                for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                    const neighbor = { x: current.x + dx, y: current.y + dy };
+
+                    if (
+                        neighbor.x >= 0 && neighbor.x < rows &&
+                        neighbor.y >= 0 && neighbor.y < columns &&
+                        !snake.some(segment => segment.x === neighbor.x && segment.y === neighbor.y)
+                    ) {
+                        const tentativeGScore = (gScore[JSON.stringify(current)] || Infinity) + 1;
+                        if (tentativeGScore < (gScore[JSON.stringify(neighbor)] || Infinity)) {
+                            cameFrom[JSON.stringify(neighbor)] = current;
+                            gScore[JSON.stringify(neighbor)] = tentativeGScore;
+                            fScore[JSON.stringify(neighbor)] = tentativeGScore + manhattanDistance(neighbor, goal);
+                            openSet.push({ f: fScore[JSON.stringify(neighbor)], position: neighbor });
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Check if the tail is reachable after a move
+        function isTailReachable(snake, newHead) {
+            const newSnake = [newHead, ...snake.slice(0, snake.length - 1)];
+            return floodFill(newSnake, newSnake[newSnake.length - 1]) >= newSnake.length;
+        }
+
+        // Get next move using pathfinding
+        function getNextMove(snake, apple) {
+            const head = snake[0];
+
+            // Find path to the apple using A* algorithm
+            const pathToApple = aStar(snake, head, apple);
+
+            if (pathToApple) {
+                const nextPosition = pathToApple[0];
+                const newSnake = [nextPosition, ...snake.slice(0, snake.length - 1)];
+
+                if (floodFill(newSnake, newSnake[newSnake.length - 1]) >= newSnake.length) {
+                    if (nextPosition.x < head.x) return "UP";
+                    if (nextPosition.x > head.x) return "DOWN";
+                    if (nextPosition.y < head.y) return "LEFT";
+                    if (nextPosition.y > head.y) return "RIGHT";
+                }
+            }
+
+            // If moving to the apple isn't safe, choose the best move
+            const possibleMoves = {
+                "UP": { x: head.x - 1, y: head.y },
+                "DOWN": { x: head.x + 1, y: head.y },
+                "LEFT": { x: head.x, y: head.y - 1 },
+                "RIGHT": { x: head.x, y: head.y + 1 },
+            };
+
+            let bestMove = "UP";
+            let maxReachableArea = -1;
+
+            for (const [move, newHead] of Object.entries(possibleMoves)) {
+                if (
+                    newHead.x >= 0 && newHead.x < rows &&
+                    newHead.y >= 0 && newHead.y < columns &&
+                    !snake.some(segment => segment.x === newHead.x && segment.y === newHead.y)
+                ) {
+                    const newSnake = [newHead, ...snake.slice(0, snake.length - 1)];
+                    if (floodFill(newSnake, newSnake[newSnake.length - 1]) >= newSnake.length) {
+                        const reachableArea = floodFill(newSnake, newSnake[newSnake.length - 1]);
+                        if (reachableArea > maxReachableArea) {
+                            maxReachableArea = reachableArea;
+                            bestMove = move;
+                        }
+                    }
+                }
+            }
+
+            return bestMove;
+        }
+
+        // Drawing Functions
+        function drawText(text, size, color, x, y) {
+            const font = "Arial";
+            ctx.fillStyle = color;
+            ctx.font = `${size}px ${font}`;
+            ctx.fillText(text, x, y);
+        }
+
         function drawGame() {
             ctx.fillStyle = darkgreen;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = evendarkergreen;
-            ctx.fillRect(border, border, canvas.width - 2 * border, canvas.height - 2 * border);
+            ctx.fillRect(border, border, width - 2 * border, tallness - 2 * border);
 
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < columns; col++) {
-                    ctx.fillStyle = (row + col) % 2 === 0 ? lightgreen : '#228B22';
+                    ctx.fillStyle = (row + col) % 2 === 0 ? lightgreen : "#228B22";
                     ctx.fillRect(border + col * tile, border + row * tile, tile, tile);
                 }
             }
@@ -74,52 +218,43 @@
             ctx.fillRect(border + apple.y * tile, border + apple.x * tile, tile, tile);
 
             if (gameOver) {
-                ctx.fillStyle = 'white';
-                ctx.font = '80px Arial';
-                ctx.fillText("Game Over!", canvas.width / 2 - 150, canvas.height / 2 - 50);
-                ctx.font = '50px Arial';
-                ctx.fillText(`Length: ${snake.length}`, canvas.width / 2 - 100, canvas.height / 2 + 10);
+                drawText("Game Over!", 80, "white", width / 2 - 150, tallness / 2 - 50);
+                drawText(`Length: ${snake.length}`, 50, "white", width / 2 - 100, tallness / 2 + 10);
             }
         }
 
-        function moveSnake() {
+        // Game Loop
+        function gameLoop() {
             if (gameOver) return;
 
-            let head = Object.assign({}, snake[0]);
-            if (direction === 'UP') head.x--;
-            if (direction === 'DOWN') head.x++;
-            if (direction === 'LEFT') head.y--;
-            if (direction === 'RIGHT') head.y++;
+            const move = getNextMove(snake, apple);
 
-            if (head.x < 0 || head.x >= rows || head.y < 0 || head.y >= columns || snake.some(segment => segment.x === head.x && segment.y === head.y)) {
+            let head = { ...snake[0] };
+            if (move === "UP") head.x--;
+            if (move === "DOWN") head.x++;
+            if (move === "LEFT") head.y--;
+            if (move === "RIGHT") head.y++;
+
+            if (
+                snake.some(segment => segment.x === head.x && segment.y === head.y) ||
+                head.x < 0 || head.x >= rows || head.y < 0 || head.y >= columns
+            ) {
                 gameOver = true;
                 return;
             }
 
             snake.unshift(head);
+
             if (head.x === apple.x && head.y === apple.y) {
                 apple = generateApple();
             } else {
                 snake.pop();
             }
-        }
 
-        function handleDirectionChange(event) {
-            if (event.key === 'ArrowUp' && direction !== 'DOWN') direction = 'UP';
-            if (event.key === 'ArrowDown' && direction !== 'UP') direction = 'DOWN';
-            if (event.key === 'ArrowLeft' && direction !== 'RIGHT') direction = 'LEFT';
-            if (event.key === 'ArrowRight' && direction !== 'LEFT') direction = 'RIGHT';
-        }
-
-        function gameLoop() {
-            if (gameOver) return;
-
-            moveSnake();
             drawGame();
         }
 
         setInterval(gameLoop, 100);
-        window.addEventListener('keydown', handleDirectionChange);
 
     </script>
 </body>
