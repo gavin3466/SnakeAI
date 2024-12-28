@@ -95,13 +95,34 @@
             const path = findPathToApple(head, apple);
 
             if (path.length > 0) {
+                // Move in the direction of the apple
                 head.x += path[0].dx;
                 head.y += path[0].dy;
             } else {
-                // If no path exists, move safely
-                const safeMove = getSafeMove(head);
-                head.x += safeMove.dx;
-                head.y += safeMove.dy;
+                // If no direct path to apple exists, prefer horizontal movement (left-right)
+                // so the snake avoids interacting with borders unnecessarily
+                if (head.y === apple.y) {
+                    // If snake and apple are on the same horizontal line, just move horizontally
+                    const horizontalMove = (apple.x > head.x) ? { dx: 1, dy: 0 } : { dx: -1, dy: 0 };
+                    head.x += horizontalMove.dx;
+                    head.y += horizontalMove.dy;
+                } else if (head.y < apple.y) {
+                    // If apple is below, try to move down first
+                    head.y += 1;
+                } else {
+                    // If apple is above, try to move up first
+                    head.y -= 1;
+                }
+            }
+
+            // Prevent the snake from going to the edge unless necessary
+            if (
+                (head.x < 0 || head.x >= columns || head.y < 0 || head.y >= rows) &&
+                !isEscapeMove(head)
+            ) {
+                // Keep the snake inside the borders
+                head.x = Math.max(0, Math.min(columns - 1, head.x));
+                head.y = Math.max(0, Math.min(rows - 1, head.y));
             }
 
             if (
@@ -120,6 +141,12 @@
             } else {
                 snake.pop();
             }
+        }
+
+        function isEscapeMove(head) {
+            // Check if the snake is about to hit a wall and needs to escape.
+            // The snake can escape to an edge if it's blocked in another direction
+            return snake.some(segment => segment.x === head.x && segment.y === head.y);
         }
 
         function findPathToApple(start, target) {
