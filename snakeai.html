@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Game with AI and Checkerboard</title>
+    <title>Snake Game with Smart AI</title>
     <style>
         body {
             margin: 0;
@@ -34,8 +34,8 @@
 
         const snakeColor = "#FF0000";
         const appleColor = "#FFA500";
-        const lightGreen = "#008000";
-        const green = "#0f4d0f";
+        const lightGreen = "#A9DFBF";
+        const green = "#228B22";
 
         let snake = [{ x: 10, y: 10 }];
         let apple = { x: 15, y: 15 };
@@ -70,6 +70,13 @@
             ctx.fill();
         }
 
+        function drawLengthCounter() {
+            ctx.fillStyle = "#000000";
+            ctx.font = "16px Arial";
+            ctx.textAlign = "right";
+            ctx.fillText(`Length: ${snake.length}`, canvas.width - 10, canvas.height - 10);
+        }
+
         function generateApple() {
             while (true) {
                 const newApple = {
@@ -84,16 +91,24 @@
 
         function updateSnake() {
             const head = { ...snake[0] };
-            const nextMove = getNextMove(head);
-            head.x += nextMove.dx;
-            head.y += nextMove.dy;
+            const path = findPathToApple(head, apple);
+
+            if (path.length > 0) {
+                head.x += path[0].dx;
+                head.y += path[0].dy;
+            } else {
+                // If no path exists, move safely
+                const safeMove = getSafeMove(head);
+                head.x += safeMove.dx;
+                head.y += safeMove.dy;
+            }
 
             if (
                 head.x < 0 || head.x >= columns || head.y < 0 || head.y >= rows ||
                 snake.some(segment => segment.x === head.x && segment.y === head.y)
             ) {
                 gameOver = true;
-                alert("Game Over!");
+                alert(`Game Over! Your snake's length was: ${snake.length}`);
                 return;
             }
 
@@ -106,59 +121,77 @@
             }
         }
 
-        function getNextMove(head) {
-            const dx = apple.x - head.x;
-            const dy = apple.y - head.y;
+        function findPathToApple(start, target) {
+            const directions = [
+                { dx: 0, dy: -1 }, // Up
+                { dx: 0, dy: 1 },  // Down
+                { dx: -1, dy: 0 }, // Left
+                { dx: 1, dy: 0 }   // Right
+            ];
 
-            const nextMoves = [];
+            const queue = [{ x: start.x, y: start.y, path: [] }];
+            const visited = new Set();
+            visited.add(`${start.x},${start.y}`);
 
-            // Add potential moves based on proximity to the apple
-            if (dx > 0) nextMoves.push({ dx: 1, dy: 0 }); // Move right
-            if (dx < 0) nextMoves.push({ dx: -1, dy: 0 }); // Move left
-            if (dy > 0) nextMoves.push({ dx: 0, dy: 1 }); // Move down
-            if (dy < 0) nextMoves.push({ dx: 0, dy: -1 }); // Move up
+            while (queue.length > 0) {
+                const current = queue.shift();
 
-            // Add safe fallback moves (no collisions)
-            const fallbackMoves = [
-                { dx: 1, dy: 0 },
-                { dx: -1, dy: 0 },
-                { dx: 0, dy: 1 },
-                { dx: 0, dy: -1 },
-            ].filter(move => {
-                const newX = head.x + move.dx;
-                const newY = head.y + move.dy;
-                return (
-                    newX >= 0 &&
-                    newX < columns &&
-                    newY >= 0 &&
-                    newY < rows &&
-                    !snake.some(segment => segment.x === newX && segment.y === newY)
-                );
-            });
+                if (current.x === target.x && current.y === target.y) {
+                    return current.path; // Found a path
+                }
 
-            // Prioritize optimal moves (toward the apple)
-            for (const move of nextMoves) {
-                const newX = head.x + move.dx;
-                const newY = head.y + move.dy;
-                if (
-                    newX >= 0 &&
-                    newX < columns &&
-                    newY >= 0 &&
-                    newY < rows &&
-                    !snake.some(segment => segment.x === newX && segment.y === newY)
-                ) {
-                    return move;
+                for (const dir of directions) {
+                    const newX = current.x + dir.dx;
+                    const newY = current.y + dir.dy;
+
+                    if (
+                        newX >= 0 && newX < columns &&
+                        newY >= 0 && newY < rows &&
+                        !snake.some(segment => segment.x === newX && segment.y === newY) &&
+                        !visited.has(`${newX},${newY}`)
+                    ) {
+                        queue.push({
+                            x: newX,
+                            y: newY,
+                            path: [...current.path, dir]
+                        });
+                        visited.add(`${newX},${newY}`);
+                    }
                 }
             }
 
-            // If no optimal moves, use fallback
-            return fallbackMoves.length ? fallbackMoves[0] : { dx: 0, dy: 0 };
+            return []; // No path found
+        }
+
+        function getSafeMove(head) {
+            const directions = [
+                { dx: 0, dy: -1 }, // Up
+                { dx: 0, dy: 1 },  // Down
+                { dx: -1, dy: 0 }, // Left
+                { dx: 1, dy: 0 }   // Right
+            ];
+
+            for (const dir of directions) {
+                const newX = head.x + dir.dx;
+                const newY = head.y + dir.dy;
+
+                if (
+                    newX >= 0 && newX < columns &&
+                    newY >= 0 && newY < rows &&
+                    !snake.some(segment => segment.x === newX && segment.y === newY)
+                ) {
+                    return dir;
+                }
+            }
+
+            return { dx: 0, dy: 0 }; // No safe move
         }
 
         function draw() {
             drawCheckerboard();
             drawSnake();
             drawApple();
+            drawLengthCounter();
         }
 
         function gameLoop() {
